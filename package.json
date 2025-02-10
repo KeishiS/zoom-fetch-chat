@@ -1,0 +1,15 @@
+{
+  "name": "zoom-fetch-chat",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "license": "MIT",
+  "dependencies": {
+    "body-parser": "^1.20.3",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "dotenv": "^16.4.7",
+    "typescript": "^5.7.3"
+  }
+}
