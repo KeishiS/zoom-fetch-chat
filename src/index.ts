@@ -2,53 +2,25 @@ import express, { Request, Response } from "express";
 import bodyParser from "body-parser";
 import "dotenv/config";
 import { createHmac } from "crypto";
+import {
+  ZoomBody,
+  ParticipantJoinedPayload,
+  ParticipantLeftPayload,
+  MessageSentPayload,
+  UrlValidationPayload,
+} from "./types/zoom";
 
 const app = express();
 const ZOOM_VERIFICATION_TOKEN = process.env.ZOOM_VERIFICATION_TOKEN!;
 const ZOOM_SECRET_TOKEN = process.env.ZOOM_WEBHOOK_SECRET_TOKEN!;
 const PORT = 10808;
 
-type Event =
-  | "meeting.chat_message_sent"
-  | "meeting.participant_joined"
-  | "meeting.participant_left";
-
-interface MessageDetail {
-  date_time: string;
-  sender_session_id: string;
-  sender_name: string;
-  sender_email: string;
-  sender_type: string;
-  recipient_session_id: string;
-  recipient_name: string;
-  recipient_email: string;
-  recipient_type: string;
-  message_id: string;
-  message_content: string;
-  file_ids: string[];
-}
-interface MessageSent {
-  event: Event;
-  payload: {
-    account_id: string;
-    object: {
-      id: number;
-      uuid: string;
-      chat_message: MessageDetail;
-    };
-  };
-}
-
-interface MessageResponse {
-  status: string;
-}
-
 app.use(bodyParser.json());
-app.post("/", (req: Request, res: Response) => {
+app.post("/", (_: Request, res: Response) => {
   console.log("[INFO] Start `post`");
-  res.status(200).send("OK");
+  res.status(200).json({ message: "SUCCESS" });
 });
-app.post("/zoom/webhook", (req: Request, res: Response) => {
+app.post("/zoom/webhook", (req: Request<{}, {}, ZoomBody>, res: Response) => {
   console.log("[INFO] Start `post` in /zoom/webhook");
 
   const zoomToken = req.headers["authorization"];
@@ -57,21 +29,72 @@ app.post("/zoom/webhook", (req: Request, res: Response) => {
     res.status(401).send("Unauthorized");
     return;
   }
-  const eventType = req.body.event;
-  const payload = req.body.payload;
+  const message = `v0:${req.headers["x-zm-request-timestamp"]}:${JSON.stringify(req.body)}`;
+  const hashForVerify = createHmac("sha256", ZOOM_SECRET_TOKEN)
+    .update(message)
+    .digest("hex");
+  const signature = `v0=${hashForVerify}`;
+  if (req.headers["x-zm-signature"] != signature) {
+    console.error(
+      `\tFailed Verification: x-zm-signature: ${req.headers["x-zm-signature"]}, signature: ${signature}`,
+    );
+    res.status(401).send("Unauthorized");
+    return;
+  }
 
-  console.info(`\t[INFO] eventType: ${eventType}`);
-  if (eventType === "endpoint.url_validation") {
-    const hashForValidate = createHmac("sha256", ZOOM_SECRET_TOKEN)
-      .update(payload.plainToken)
-      .digest("hex");
-    res.json({
-      plainToken: payload.plainToken,
-      encryptedToken: hashForValidate,
-    });
-  } else if (eventType === "meeting.chat_message_sent") {
-  } else if (eventType === "meeting.participant_joined") {
-  } else if (eventType === "meeting.participant_left") {
+  console.info(`\teventType: ${req.body.event}`);
+  switch (req.body.event) {
+    case "meeting.message_sent": {
+      const payload: MessageSentPayload = req.body.payload;
+      const sender = payload.object.chat_message.sender_name;
+      const content = payload.object.chat_message.message_content;
+      console.info(`\t${sender}: ${content}`);
+      res.json({
+        message: "OK",
+        status: 200,
+      });
+      break;
+    }
+    case "meeting.participant_joined": {
+      const payload: ParticipantJoinedPayload = req.body.payload;
+      const user_id = payload.object.participant.user_id;
+      const join_time = payload.object.participant.join_time;
+      console.info(`\t${join_time}: ${user_id}`);
+      res.json({
+        message: "OK",
+        status: 200,
+      });
+      break;
+    }
+    case "meeting.participant_left": {
+      const payload: ParticipantLeftPayload = req.body.payload;
+      const user_id = payload.object.participant.user_id;
+      const leave_time = payload.object.participant.leave_time;
+      console.info(`\t${leave_time}: ${user_id}`);
+      res.json({
+        message: "OK",
+        status: 200,
+      });
+      break;
+    }
+    case "endpoint.url_validation": {
+      const payload: UrlValidationPayload = req.body.payload;
+      const hashForValidate = createHmac("sha256", ZOOM_SECRET_TOKEN)
+        .update(payload.plainToken)
+        .digest("hex");
+      res.json({
+        plainToken: payload.plainToken,
+        encryptedToken: hashForValidate,
+      });
+      break;
+    }
+    default: {
+      console.error("\tUnexpected Event happend");
+      res.json({
+        message: "OK",
+        status: 200,
+      });
+    }
   }
 
   res.status(200);
