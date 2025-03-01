@@ -1,3 +1,4 @@
+import { get_access_token_with_code } from "./util";
 import express, { Request, Response } from "express";
 import bodyParser from "body-parser";
 import "dotenv/config";
@@ -10,27 +11,36 @@ import {
   UrlValidationPayload,
 } from "./types/zoom";
 
+// get_access_token();
 const app = express();
-const ZOOM_VERIFICATION_TOKEN = process.env.ZOOM_VERIFICATION_TOKEN!;
-const ZOOM_SECRET_TOKEN = process.env.ZOOM_WEBHOOK_SECRET_TOKEN!;
+const WEBHOOK_VERIFICATION_TOKEN = process.env.WEBHOOK_VERIFICATION_TOKEN!;
+const WEBHOOK_SECRET_TOKEN = process.env.WEBHOOK_SECRET_TOKEN!;
 const PORT = 10808;
 
 app.use(bodyParser.json());
-app.post("/", (_: Request, res: Response) => {
-  console.log("[INFO] Start `post`");
-  res.status(200).json({ message: "SUCCESS" });
+
+app.get("/callback", (req: Request, res: Response) => {
+  console.log("[INFO] start `get` in /callback");
+  const code = req.query.code as string | undefined;
+  res.status(200).send("OK");
+  if (!code) {
+    return;
+  }
+  console.log(`\tcode: ${code}`);
+  get_access_token_with_code(code);
 });
-app.post("/zoom/webhook", (req: Request<{}, {}, ZoomBody>, res: Response) => {
+
+app.post("/webhook", (req: Request<{}, {}, ZoomBody>, res: Response) => {
   console.log("[INFO] Start `post` in /zoom/webhook");
 
   const zoomToken = req.headers["authorization"];
-  if (!zoomToken || zoomToken != ZOOM_VERIFICATION_TOKEN) {
+  if (!zoomToken || zoomToken != WEBHOOK_VERIFICATION_TOKEN) {
     console.error("\tInvalid Request");
     res.status(401).send("Unauthorized");
     return;
   }
   const message = `v0:${req.headers["x-zm-request-timestamp"]}:${JSON.stringify(req.body)}`;
-  const hashForVerify = createHmac("sha256", ZOOM_SECRET_TOKEN)
+  const hashForVerify = createHmac("sha256", WEBHOOK_SECRET_TOKEN)
     .update(message)
     .digest("hex");
   const signature = `v0=${hashForVerify}`;
@@ -44,7 +54,7 @@ app.post("/zoom/webhook", (req: Request<{}, {}, ZoomBody>, res: Response) => {
 
   console.info(`\teventType: ${req.body.event}`);
   switch (req.body.event) {
-    case "meeting.message_sent": {
+    case "meeting.chat_message_sent": {
       const payload: MessageSentPayload = req.body.payload;
       const sender = payload.object.chat_message.sender_name;
       const content = payload.object.chat_message.message_content;
@@ -79,7 +89,7 @@ app.post("/zoom/webhook", (req: Request<{}, {}, ZoomBody>, res: Response) => {
     }
     case "endpoint.url_validation": {
       const payload: UrlValidationPayload = req.body.payload;
-      const hashForValidate = createHmac("sha256", ZOOM_SECRET_TOKEN)
+      const hashForValidate = createHmac("sha256", WEBHOOK_SECRET_TOKEN)
         .update(payload.plainToken)
         .digest("hex");
       res.json({
