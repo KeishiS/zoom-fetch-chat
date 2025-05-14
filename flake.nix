@@ -12,6 +12,7 @@
       devShells.${system}.default = pkgs.mkShell {
         packages = with pkgs; [
           ngrok
+          nodejs_22
         ];
       };
   };

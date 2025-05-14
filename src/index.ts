@@ -31,12 +31,12 @@ app.get("/callback", (req: Request, res: Response) => {
 });
 
 app.post("/webhook", (req: Request<{}, {}, ZoomBody>, res: Response) => {
-  console.log("[INFO] Start `post` in /zoom/webhook");
+  console.log("[INFO] Start `post` in /webhook");
 
   const zoomToken = req.headers["authorization"];
   if (!zoomToken || zoomToken != WEBHOOK_VERIFICATION_TOKEN) {
     console.error("\tInvalid Request");
-    res.status(401).send("Unauthorized");
+    res.status(401).send("unauthorized");
     return;
   }
   const message = `v0:${req.headers["x-zm-request-timestamp"]}:${JSON.stringify(req.body)}`;
@@ -48,7 +48,7 @@ app.post("/webhook", (req: Request<{}, {}, ZoomBody>, res: Response) => {
     console.error(
       `\tFailed Verification: x-zm-signature: ${req.headers["x-zm-signature"]}, signature: ${signature}`,
     );
-    res.status(401).send("Unauthorized");
+    res.status(401).send("unauthorized");
     return;
   }
 
